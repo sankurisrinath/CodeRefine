@@ -3,8 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Code2, FolderOpen, History, BarChart3, ChevronDown, User, Settings, LogOut, Search } from 'lucide-react'
 import { searchResults } from '../data/mockData'
+import * as api from "../services/api"
+
 
 function Navbar() {
+  const [profile,setProfile] = useState(null)
   const location = useLocation()
   const navigate = useNavigate()
   const [profileOpen, setProfileOpen] = useState(false)
@@ -26,6 +29,15 @@ function Navbar() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  useEffect(()=> {
+    async function loadprofile(){
+      const data = await api.getProfile()
+      setProfile(data)
+    }
+    loadprofile()
+  })
+
 
   const appNavLinks = [
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -149,8 +161,8 @@ function Navbar() {
                         className="absolute right-0 top-full mt-2 w-48 glass rounded-xl border border-white/10 overflow-hidden shadow-xl"
                       >
                         <div className="px-4 py-3 border-b border-white/10">
-                          <p className="text-sm font-medium text-white">Alex Johnson</p>
-                          <p className="text-xs text-gray-400">alex.johnson@example.com</p>
+                          <p className="text-sm font-medium text-white">{profile.full_name}</p>
+                          <p className="text-xs text-gray-400">{profile.email}</p>
                         </div>
                         <Link to="/profile" onClick={() => setProfileOpen(false)} className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition-colors">
                           <User size={14} /> View Profile
