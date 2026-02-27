@@ -17,7 +17,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.post("/analyze")
+@router.post("/api/analyze")
 async def analyze(
     request: AnalysisRequest,
     db: AsyncSession = Depends(get_db),
