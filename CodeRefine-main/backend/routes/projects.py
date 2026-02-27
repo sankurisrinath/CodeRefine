@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from database import get_db
 from models.project import Project
+from models.file import File
 from models.user import User
 from utils.auth import get_current_active_user
 from pydantic import BaseModel
@@ -27,9 +28,27 @@ class ProjectResponse(BaseModel):
     repository_url: Optional[str]
     is_active: bool
     created_at: Optional[datetime]
+    files_count: int = 0
 
     class Config:
         from_attributes = True
+
+
+async def _project_response(project: Project, db: AsyncSession) -> dict:
+    count_result = await db.execute(
+        select(func.count()).where(File.project_id == project.id)
+    )
+    files_count = count_result.scalar() or 0
+    return {
+        "id": project.id,
+        "name": project.name,
+        "description": project.description,
+        "language": project.language,
+        "repository_url": project.repository_url,
+        "is_active": project.is_active,
+        "created_at": project.created_at,
+        "files_count": files_count,
+    }
 
 
 @router.get("/", response_model=List[ProjectResponse])
@@ -42,7 +61,8 @@ async def list_projects(
         .where(Project.user_id == current_user.id, Project.is_active == True)
         .order_by(Project.created_at.desc())
     )
-    return result.scalars().all()
+    projects = result.scalars().all()
+    return [await _project_response(p, db) for p in projects]
 
 
 @router.post("/", response_model=ProjectResponse, status_code=201)
@@ -55,7 +75,7 @@ async def create_project(
     db.add(project)
     await db.commit()
     await db.refresh(project)
-    return project
+    return await _project_response(project, db)
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -73,7 +93,7 @@ async def get_project(
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    return project
+    return await _project_response(project, db)
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
@@ -97,7 +117,7 @@ async def update_project(
         setattr(project, key, value)
     await db.commit()
     await db.refresh(project)
-    return project
+    return await _project_response(project, db)
 
 
 @router.delete("/{project_id}", status_code=204)
