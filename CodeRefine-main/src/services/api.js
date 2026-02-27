@@ -18,7 +18,7 @@ async function authFetch(path, options = {}) {
   return res.json();
 }
 
-export async function analyzeCode({ code, language, mode = "full", instruction = "" }) {
+export async function analyzeCode({ code, language, mode = "full", instruction = "", projectId, fileId }) {
   const headers = { "Content-Type": "application/json" };
 
   const token = getAuthToken();
@@ -26,10 +26,14 @@ export async function analyzeCode({ code, language, mode = "full", instruction =
     headers["Authorization"] = `Bearer ${token}`;
   }
 
+  const body = { code, language, mode, instruction };
+  if (projectId) body.project_id = projectId;
+  if (fileId) body.file_id = fileId;
+
   const response = await fetch(`${apiBase}/analyze`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ code, language, mode, instruction })
+    body: JSON.stringify(body)
   });
 
   if (!response.ok) {
