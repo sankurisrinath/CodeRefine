@@ -1,11 +1,72 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Upload, Plus, Save, Download, Trash2, FileCode } from 'lucide-react'
+import { ArrowLeft, Upload, Plus, Save, Download, Trash2, FileCode, Clock } from 'lucide-react'
+import Editor from '@monaco-editor/react'
 import AppLayout from '../layouts/AppLayout'
 import * as api from '../services/api'
 
 const LANGUAGE_OPTIONS = ['python', 'javascript', 'java', 'cpp', 'c', 'text']
+
+const MONACO_LANG_MAP = {
+  python: 'python',
+  javascript: 'javascript',
+  java: 'java',
+  cpp: 'cpp',
+  c: 'c',
+  text: 'plaintext',
+}
+
+const ACTION_ICONS = {
+  CREATE_FILE: '📝',
+  UPLOAD_FILE: '📤',
+  EDIT_FILE: '✏️',
+  ANALYZE_FILE: '🔍',
+  EXPORT_FILE: '📦',
+}
+
+function relativeTime(dateStr) {
+  if (!dateStr) return ''
+  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000)
+  if (diff < 60) return `${diff} second${diff !== 1 ? 's' : ''} ago`
+  if (diff < 3600) {
+    const m = Math.floor(diff / 60)
+    return `${m} minute${m !== 1 ? 's' : ''} ago`
+  }
+  if (diff < 86400) {
+    const h = Math.floor(diff / 3600)
+    return `${h} hour${h !== 1 ? 's' : ''} ago`
+  }
+  const d = Math.floor(diff / 86400)
+  return `${d} day${d !== 1 ? 's' : ''} ago`
+}
+
+function formatActionType(actionType) {
+  const label = actionType.replace(/_/g, ' ').toLowerCase()
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+function ActivityTimeline({ activities }) {
+  if (!activities || activities.length === 0) {
+    return <p className="text-gray-500 text-xs text-center py-6">No activity yet</p>
+  }
+  return (
+    <div className="space-y-2">
+      {activities.map((a) => (
+        <div key={a.id} className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/8">
+          <span className="text-base leading-none mt-0.5">{ACTION_ICONS[a.actionType] || '📋'}</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-white truncate">
+              <span className="text-gray-400">{formatActionType(a.actionType)}:</span>{' '}
+              {a.fileName}
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">{relativeTime(a.timestamp)}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function ProjectDetailPage() {
   const { id } = useParams()
@@ -22,7 +83,17 @@ function ProjectDetailPage() {
   const [newFileName, setNewFileName] = useState('')
   const [newFileLang, setNewFileLang] = useState('python')
   const [error, setError] = useState(null)
+  const [activities, setActivities] = useState([])
   const fileInputRef = useRef(null)
+
+  const refreshActivity = useCallback(async () => {
+    try {
+      const data = await api.getProjectActivity(projectId)
+      setActivities(data.activities || [])
+    } catch {
+      // ignore
+    }
+  }, [projectId])
 
   useEffect(() => {
     const load = async () => {
@@ -33,6 +104,7 @@ function ProjectDetailPage() {
         ])
         setProject(proj)
         setFiles(fileList)
+        await refreshActivity()
       } catch {
         setError('Project not found')
       } finally {
@@ -40,7 +112,7 @@ function ProjectDetailPage() {
       }
     }
     load()
-  }, [projectId])
+  }, [projectId, refreshActivity])
 
   const handleSelectFile = (file) => {
     setSelectedFile(file)
@@ -54,6 +126,7 @@ function ProjectDetailPage() {
       const updated = await api.saveFile(projectId, selectedFile.id, { content: editorContent })
       setFiles((prev) => prev.map((f) => (f.id === updated.id ? updated : f)))
       setSelectedFile(updated)
+      await refreshActivity()
     } catch {
       // ignore
     } finally {
@@ -72,6 +145,7 @@ function ProjectDetailPage() {
       setShowCreate(false)
       setNewFileName('')
       setNewFileLang('python')
+      await refreshActivity()
     } catch {
       // ignore
     }
@@ -85,6 +159,7 @@ function ProjectDetailPage() {
       setFiles((prev) => [...prev, uploaded])
       setSelectedFile(uploaded)
       setEditorContent(uploaded.content || '')
+      await refreshActivity()
     } catch (err) {
       alert(err.message || 'Upload failed')
     }
@@ -116,6 +191,7 @@ function ProjectDetailPage() {
   const handleExportZip = async () => {
     try {
       await api.exportZip(projectId, project?.name)
+      await refreshActivity()
     } catch (err) {
       alert(err.message || 'Export failed')
     }
@@ -327,12 +403,23 @@ function ProjectDetailPage() {
                     <Save size={14} /> {saving ? 'Saving…' : 'Save'}
                   </motion.button>
                 </div>
-                <textarea
-                  value={editorContent}
-                  onChange={(e) => setEditorContent(e.target.value)}
-                  className="flex-1 min-h-[400px] bg-[#0d0d14] text-gray-200 text-sm font-mono p-4 rounded-xl border border-white/10 focus:outline-none focus:border-blue-500 resize-none leading-relaxed"
-                  spellCheck={false}
-                />
+                <div className="flex-1 min-h-[400px] rounded-xl overflow-hidden border border-white/10">
+                  <Editor
+                    height="400px"
+                    language={MONACO_LANG_MAP[selectedFile.language] || 'plaintext'}
+                    value={editorContent}
+                    onChange={(val) => setEditorContent(val || '')}
+                    theme="vs-dark"
+                    options={{
+                      minimap: { enabled: false },
+                      fontSize: 13,
+                      lineNumbers: 'on',
+                      scrollBeyondLastLine: false,
+                      automaticLayout: true,
+                      padding: { top: 16, bottom: 16 },
+                    }}
+                  />
+                </div>
               </>
             ) : (
               <div className="flex flex-col items-center justify-center h-64 gap-3 text-gray-500">
@@ -342,6 +429,19 @@ function ProjectDetailPage() {
             )}
           </motion.div>
         </div>
+
+        {/* Activity Timeline */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="glass rounded-2xl p-4 mt-6"
+        >
+          <h2 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
+            <Clock size={16} className="text-purple-400" /> Activity Timeline
+          </h2>
+          <ActivityTimeline activities={activities} />
+        </motion.div>
       </motion.div>
     </AppLayout>
   )

@@ -10,6 +10,7 @@ from database import get_db
 from models.project import Project
 from models.file import File
 from models.user import User
+from models.project_activity import ProjectActivity, ActionType
 from utils.auth import get_current_active_user
 from pydantic import BaseModel
 from typing import List,Optional
@@ -67,6 +68,54 @@ async def _get_owned_project(project_id: int, current_user: User, db: AsyncSessi
     return project
 
 
+async def _log_activity(
+    db: AsyncSession,
+    user_id: int,
+    project_id: int,
+    action_type: ActionType,
+    file_name: str,
+    file_id: Optional[int] = None,
+) -> None:
+    activity = ProjectActivity(
+        user_id=user_id,
+        project_id=project_id,
+        file_id=file_id,
+        action_type=action_type,
+        file_name=file_name,
+    )
+    db.add(activity)
+
+
+@router.get("/{project_id}/history")
+async def get_project_history(
+    project_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    await _get_owned_project(project_id, current_user, db)
+    result = await db.execute(
+        select(ProjectActivity)
+        .where(
+            ProjectActivity.project_id == project_id,
+            ProjectActivity.user_id == current_user.id,
+        )
+        .order_by(ProjectActivity.timestamp.desc())
+    )
+    activities = result.scalars().all()
+    return {
+        "success": True,
+        "activities": [
+            {
+                "id": a.id,
+                "actionType": a.action_type.value,
+                "fileName": a.file_name,
+                "timestamp": a.timestamp.isoformat() if a.timestamp else None,
+            }
+            for a in activities
+        ],
+    }
+
+
 @router.get("/{project_id}/files", response_model=List[FileResponse])
 async def list_files(
     project_id: int,
@@ -96,6 +145,8 @@ async def create_file(
         source="internal",
     )
     db.add(new_file)
+    await db.flush()
+    await _log_activity(db, current_user.id, project_id, ActionType.CREATE_FILE, new_file.name, new_file.id)
     await db.commit()
     await db.refresh(new_file)
     return new_file
@@ -132,6 +183,8 @@ async def upload_file(
         source="external",
     )
     db.add(new_file)
+    await db.flush()
+    await _log_activity(db, current_user.id, project_id, ActionType.UPLOAD_FILE, new_file.name, new_file.id)
     await db.commit()
     await db.refresh(new_file)
     return new_file
@@ -158,6 +211,7 @@ async def save_file(
         db_file.name = file_data.name
     if file_data.language is not None:
         db_file.language = file_data.language
+    await _log_activity(db, current_user.id, project_id, ActionType.EDIT_FILE, db_file.name, db_file.id)
     await db.commit()
     await db.refresh(db_file)
     return db_file
@@ -223,6 +277,9 @@ async def export_zip(
     zip_buffer.seek(0)
 
     safe_name = re.sub(r"[^a-zA-Z0-9\-_]", "_", project.name)[:64] or "project"
+    for f in files:
+        await _log_activity(db, current_user.id, project_id, ActionType.EXPORT_FILE, f.name, f.id)
+    await db.commit()
     return StreamingResponse(
         zip_buffer,
         media_type="application/zip",

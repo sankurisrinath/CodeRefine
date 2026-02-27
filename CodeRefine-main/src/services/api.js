@@ -150,6 +150,8 @@ export const exportZip = async (projectId, projectName = 'project') => {
   URL.revokeObjectURL(url);
 };
 
+export const getProjectActivity = (projectId) => authFetch(`/projects/${projectId}/history`);
+
 export async function uploadFile(projectId, file) {
   const token = getAuthToken();
   const formData = new FormData();
