@@ -15,7 +15,6 @@ function ProfileCard({ user }) {
         <h2 className="text-2xl font-bold text-white">{user.name}</h2>
         <p className="text-gray-400 mt-1">{user.email}</p>
         <div className="flex flex-wrap gap-3 mt-3">
-          <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-sm">{user.role}</span>
           <span className="text-sm text-gray-500">Joined {user.joinDate}</span>
         </div>
       </div>

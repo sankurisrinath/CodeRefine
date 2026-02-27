@@ -2,17 +2,15 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard, Code2, FolderOpen, BarChart3, User,
-  ChevronLeft, ChevronRight, ChevronDown, Clock,
+  LayoutDashboard, Code2, FolderOpen, User,
+  ChevronLeft, ChevronRight, ChevronDown,
   Bug, Gauge, Shield, Sparkles, GitBranch, BookOpen
 } from 'lucide-react'
-import { analysisHistory } from '../data/mockData'
 
 const navLinks = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/analyzer', label: 'Analyzer', icon: Code2 },
   { to: '/projects', label: 'Projects', icon: FolderOpen },
-  { to: '/insights', label: 'Insights', icon: BarChart3 },
   { to: '/profile', label: 'Profile', icon: User },
 ]
 
@@ -24,8 +22,6 @@ const analyzerModes = [
   { icon: GitBranch, label: 'Refactor Mode', mode: 'Refactor Mode' },
   { icon: BookOpen, label: 'Complexity', mode: 'Complexity Analysis' },
 ]
-
-const recentAnalyses = analysisHistory.slice(0, 3)
 
 function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
@@ -127,39 +123,6 @@ function Sidebar() {
           })}
         </div>
 
-        {/* Recent Analyses */}
-        {!collapsed && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="px-3 mt-2"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <Clock size={12} className="text-gray-500" />
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Recent</span>
-            </div>
-            <div className="space-y-1">
-              {recentAnalyses.map((item) => (
-                <Link
-                  key={item.id}
-                  to="/analyzer"
-                  className="flex items-start gap-2 px-2 py-2 rounded-lg hover:bg-white/5 transition-colors group"
-                >
-                  <span className="text-xs mt-0.5">📄</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-gray-300 truncate group-hover:text-white transition-colors">{item.title}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-xs text-gray-500 truncate">{item.language}</span>
-                      <span className="text-gray-600">·</span>
-                      <span className="text-xs text-gray-600">{item.date}</span>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </motion.div>
-        )}
       </div>
     </motion.aside>
   )
