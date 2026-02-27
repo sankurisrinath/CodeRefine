@@ -12,7 +12,7 @@ from models.file import File
 from models.user import User
 from utils.auth import get_current_active_user
 from pydantic import BaseModel
-from typing import List
+from typing import List,Optional
 from datetime import datetime
 
 router = APIRouter(prefix="/api/projects", tags=["files"])
