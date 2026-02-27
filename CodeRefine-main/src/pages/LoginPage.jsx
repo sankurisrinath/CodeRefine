@@ -1,14 +1,30 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 
 function LoginPage() {
   const navigate = useNavigate()
-  const [form, setForm] = useState({ email: '', password: '', remember: false })
+  const location = useLocation()
+  const { login } = useAuth()
+  const [form, setForm] = useState({ username: '', password: '', remember: false })
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e) => {
+  const from = location.state?.from?.pathname || '/dashboard'
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    navigate('/dashboard')
+    setError('')
+    setLoading(true)
+    try {
+      await login(form.username, form.password)
+      navigate(from, { replace: true })
+    } catch (err) {
+      setError(err.message || 'Login failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -32,13 +48,19 @@ function LoginPage() {
 
         <div className="glass rounded-2xl p-8">
           <form onSubmit={handleSubmit} className="space-y-5">
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm">
+                {error}
+              </div>
+            )}
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">Email</label>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Username</label>
               <input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="you@example.com"
+                type="text"
+                value={form.username}
+                onChange={(e) => setForm({ ...form, username: e.target.value })}
+                placeholder="yourusername"
+                required
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
               />
             </div>
@@ -49,6 +71,7 @@ function LoginPage() {
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 placeholder="••••••••"
+                required
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
               />
             </div>
@@ -68,11 +91,12 @@ function LoginPage() {
             </div>
             <motion.button
               type="submit"
+              disabled={loading}
               whileTap={{ scale: 0.98 }}
               whileHover={{ scale: 1.01 }}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold hover:from-blue-600 hover:to-purple-700 transition-all shadow-lg shadow-blue-500/20"
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold hover:from-blue-600 hover:to-purple-700 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-60"
             >
-              Sign In
+              {loading ? 'Signing in...' : 'Sign In'}
             </motion.button>
           </form>
           <p className="text-center text-sm text-gray-400 mt-6">
