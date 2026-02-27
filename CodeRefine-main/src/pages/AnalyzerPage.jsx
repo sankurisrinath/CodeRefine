@@ -1,13 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronRight, ChevronLeft, Download, RefreshCw, Save, CheckCircle } from 'lucide-react'
+import { ChevronRight, ChevronLeft, Download, RefreshCw, Save, CheckCircle, FolderOpen } from 'lucide-react'
 import AppLayout from '../layouts/AppLayout'
 import CodeEditor from '../components/CodeEditor'
 import ResultsPanel from '../components/ResultsPanel'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { languageLabels, analysisModes } from '../data/mockData'
-import { analyzeCode } from '../services/api'
+import { analyzeCode, getProjects, getProjectFiles } from '../services/api'
 import { transformResponse } from '../utils/transformResponse'
 
 const TOTAL_STEPS = 5
@@ -66,6 +66,53 @@ function AnalyzerPage() {
   const [error, setError] = useState(null)
   const [toast, setToast] = useState(null)
 
+  // File selector state
+  const [useProjectFile, setUseProjectFile] = useState(false)
+  const [projects, setProjects] = useState([])
+  const [selectedProjectId, setSelectedProjectId] = useState('')
+  const [projectFiles, setProjectFiles] = useState([])
+  const [selectedFileId, setSelectedFileId] = useState('')
+  const [loadingProjects, setLoadingProjects] = useState(false)
+  const [loadingFiles, setLoadingFiles] = useState(false)
+
+  // Load projects when file selector is enabled
+  useEffect(() => {
+    if (useProjectFile && projects.length === 0) {
+      setLoadingProjects(true)
+      getProjects()
+        .then((data) => setProjects(data || []))
+        .catch(() => setProjects([]))
+        .finally(() => setLoadingProjects(false))
+    }
+  }, [useProjectFile, projects.length])
+
+  // Load files when a project is selected
+  useEffect(() => {
+    if (selectedProjectId) {
+      setLoadingFiles(true)
+      setProjectFiles([])
+      setSelectedFileId('')
+      getProjectFiles(selectedProjectId)
+        .then((data) => setProjectFiles(data || []))
+        .catch(() => setProjectFiles([]))
+        .finally(() => setLoadingFiles(false))
+    } else {
+      setProjectFiles([])
+      setSelectedFileId('')
+    }
+  }, [selectedProjectId])
+
+  // Load file content when a file is selected
+  useEffect(() => {
+    if (selectedFileId) {
+      const file = projectFiles.find((f) => f.id === selectedFileId)
+      if (file) {
+        setCode(file.content || '')
+        setLanguage(file.language || 'python')
+      }
+    }
+  }, [selectedFileId, projectFiles])
+
   const showToast = (msg) => {
     setToast(msg)
     setTimeout(() => setToast(null), 2500)
@@ -88,7 +135,12 @@ function AnalyzerPage() {
     setError(null)
     try {
       const currentModeName = analysisModes.find((m) => m.id === selectedMode)?.name || selectedMode
-      const apiResponse = await analyzeCode({ language, mode: currentModeName, code, instruction: customInstruction })
+      const params = { language, mode: currentModeName, code, instruction: customInstruction }
+      if (useProjectFile && selectedProjectId && selectedFileId) {
+        params.projectId = selectedProjectId
+        params.fileId = selectedFileId
+      }
+      const apiResponse = await analyzeCode(params)
       setResults(transformResponse(apiResponse))
     } catch {
       setError('AI Analysis Failed. Please try again.')
@@ -134,6 +186,9 @@ function AnalyzerPage() {
 
   const handleRerun = () => {
     setResults(null)
+    setUseProjectFile(false)
+    setSelectedProjectId('')
+    setSelectedFileId('')
     goToStep(1)
   }
 
@@ -199,18 +254,82 @@ function AnalyzerPage() {
             {step === 2 && (
               <div className="glass rounded-2xl p-6">
                 <h2 className="text-lg font-semibold text-white mb-4">Paste Your Code</h2>
-                <div className="flex items-center gap-3 mb-4">
-                  <label className="text-sm font-medium text-gray-400">Language:</label>
-                  <select
-                    value={language}
-                    onChange={(e) => handleLanguageChange(e.target.value)}
-                    className="bg-white/10 border border-white/20 text-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+
+                {/* Toggle: paste code vs select from project */}
+                <div className="flex items-center gap-2 mb-4">
+                  <button
+                    onClick={() => setUseProjectFile(false)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${!useProjectFile ? 'bg-blue-500/30 border border-blue-500/50 text-blue-300' : 'bg-white/5 border border-white/10 text-gray-400 hover:text-white'}`}
                   >
-                    {Object.entries(languageLabels).map(([value, label]) => (
-                      <option key={value} value={value} className="bg-gray-900">{label}</option>
-                    ))}
-                  </select>
+                    Paste Code
+                  </button>
+                  <button
+                    onClick={() => setUseProjectFile(true)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${useProjectFile ? 'bg-blue-500/30 border border-blue-500/50 text-blue-300' : 'bg-white/5 border border-white/10 text-gray-400 hover:text-white'}`}
+                  >
+                    <FolderOpen size={13} /> Select File from Project
+                  </button>
                 </div>
+
+                {useProjectFile ? (
+                  <div className="space-y-3 mb-4">
+                    <div>
+                      <label className="text-xs text-gray-400 mb-1.5 block">Select Project</label>
+                      {loadingProjects ? (
+                        <p className="text-sm text-gray-500">Loading projects…</p>
+                      ) : (
+                        <select
+                          value={selectedProjectId}
+                          onChange={(e) => setSelectedProjectId(e.target.value ? parseInt(e.target.value) : '')}
+                          className="w-full bg-white/10 border border-white/20 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="" className="bg-gray-900">— Choose a project —</option>
+                          {projects.map((p) => (
+                            <option key={p.id} value={p.id} className="bg-gray-900">{p.name}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    {selectedProjectId && (
+                      <div>
+                        <label className="text-xs text-gray-400 mb-1.5 block">Select File</label>
+                        {loadingFiles ? (
+                          <p className="text-sm text-gray-500">Loading files…</p>
+                        ) : projectFiles.length === 0 ? (
+                          <p className="text-sm text-gray-500">No files in this project</p>
+                        ) : (
+                          <select
+                            value={selectedFileId}
+                            onChange={(e) => setSelectedFileId(e.target.value ? parseInt(e.target.value) : '')}
+                            className="w-full bg-white/10 border border-white/20 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                          >
+                            <option value="" className="bg-gray-900">— Choose a file —</option>
+                            {projectFiles.map((f) => (
+                              <option key={f.id} value={f.id} className="bg-gray-900">{f.name} ({f.language})</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
+                    {selectedFileId && code && (
+                      <p className="text-xs text-green-400">✔ File loaded — you can preview or edit the code below</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 mb-4">
+                    <label className="text-sm font-medium text-gray-400">Language:</label>
+                    <select
+                      value={language}
+                      onChange={(e) => handleLanguageChange(e.target.value)}
+                      className="bg-white/10 border border-white/20 text-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                    >
+                      {Object.entries(languageLabels).map(([value, label]) => (
+                        <option key={value} value={value} className="bg-gray-900">{label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <CodeEditor language={language} value={code} onChange={(val) => setCode(val || '')} />
               </div>
             )}
