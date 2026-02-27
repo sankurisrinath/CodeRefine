@@ -143,7 +143,7 @@ function Dashboard() {
                   <tr className="text-gray-500 border-b border-white/5">
                     <th className="text-left pb-3 font-medium">Language</th>
                     <th className="text-left pb-3 font-medium">Mode</th>
-                    <th className="text-left pb-3 font-medium">Confidence</th>
+                    
                     <th className="text-left pb-3 font-medium">Date</th>
                   </tr>
                 </thead>
@@ -152,7 +152,7 @@ function Dashboard() {
                     <tr key={item.id} className="border-b border-white/5 hover:bg-white/3 transition-colors">
                       <td className="py-3"><span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-xs">{item.language}</span></td>
                       <td className="py-3"><span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-xs">{item.mode}</span></td>
-                      <td className="py-3 font-semibold text-green-400">{item.confidence_score ? `${Math.round(item.confidence_score)}%` : '—'}</td>
+                     
                       <td className="py-3 text-gray-400">{item.created_at ? new Date(item.created_at).toLocaleDateString() : '—'}</td>
                     </tr>
                   ))}
