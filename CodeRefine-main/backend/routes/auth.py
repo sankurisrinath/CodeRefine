@@ -12,7 +12,7 @@ from utils.auth import (
     get_current_active_user,
 )
 from config.settings import ACCESS_TOKEN_EXPIRE_MINUTES
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
@@ -22,6 +22,15 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     full_name: str = None
+
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        if len(v.encode('utf-8')) > 72:
+            raise ValueError('Password is too long (maximum length exceeded)')
+        return v
 
 
 class UserResponse(BaseModel):
