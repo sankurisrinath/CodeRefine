@@ -1,16 +1,15 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useSearchParams } from 'react-router-dom'
-import { ChevronRight, ChevronLeft, Download, RefreshCw, Save, CheckCircle } from 'lucide-react'
+import { ChevronRight, ChevronLeft, Download, RefreshCw, Save, FolderOpen } from 'lucide-react'
 import AppLayout from '../layouts/AppLayout'
 import CodeEditor from '../components/CodeEditor'
 import ResultsPanel from '../components/ResultsPanel'
 import LoadingSpinner from '../components/LoadingSpinner'
-import { languageLabels, analysisModes } from '../data/mockData'
-import { analyzeCode } from '../services/api'
+import { languageLabels } from '../data/mockData'
+import { analyzeCode, getProjects, getProjectFiles } from '../services/api'
 import { transformResponse } from '../utils/transformResponse'
 
-const TOTAL_STEPS = 5
+const TOTAL_STEPS = 4
 
 const slideVariants = {
   enter: (dir) => ({ x: dir > 0 ? 60 : -60, opacity: 0 }),
@@ -34,7 +33,7 @@ function StepProgress({ step }) {
         />
       </div>
       <div className="flex justify-between mt-2">
-        {['Mode', 'Code', 'Instruction', 'Analyze', 'Result'].map((label, i) => (
+        {['Code', 'Instruction', 'Review', 'Result'].map((label, i) => (
           <span
             key={label}
             className={`text-xs ${i + 1 <= step ? 'text-blue-400' : 'text-gray-600'} hidden sm:block`}
@@ -48,16 +47,8 @@ function StepProgress({ step }) {
 }
 
 function AnalyzerPage() {
-  const [searchParams] = useSearchParams()
-  const preselectedMode = searchParams.get('mode')
-
   const [step, setStep] = useState(1)
   const [direction, setDirection] = useState(1)
-  const [selectedMode, setSelectedMode] = useState(
-    preselectedMode
-      ? (analysisModes.find((m) => m.name === preselectedMode)?.id || analysisModes.find((m) => m.name.toLowerCase().replace(/\s+/g, '-') === preselectedMode.toLowerCase().replace(/\s+/g, '-'))?.id || 'bug')
-      : 'bug'
-  )
   const [language, setLanguage] = useState('python')
   const [code, setCode] = useState('')
   const [customInstruction, setCustomInstruction] = useState('')
@@ -65,6 +56,53 @@ function AnalyzerPage() {
   const [results, setResults] = useState(null)
   const [error, setError] = useState(null)
   const [toast, setToast] = useState(null)
+
+  // File selector state
+  const [useProjectFile, setUseProjectFile] = useState(false)
+  const [projects, setProjects] = useState([])
+  const [selectedProjectId, setSelectedProjectId] = useState('')
+  const [projectFiles, setProjectFiles] = useState([])
+  const [selectedFileId, setSelectedFileId] = useState('')
+  const [loadingProjects, setLoadingProjects] = useState(false)
+  const [loadingFiles, setLoadingFiles] = useState(false)
+
+  // Load projects when file selector is enabled
+  useEffect(() => {
+    if (useProjectFile && projects.length === 0) {
+      setLoadingProjects(true)
+      getProjects()
+        .then((data) => setProjects(data || []))
+        .catch(() => setProjects([]))
+        .finally(() => setLoadingProjects(false))
+    }
+  }, [useProjectFile, projects.length])
+
+  // Load files when a project is selected
+  useEffect(() => {
+    if (selectedProjectId) {
+      setLoadingFiles(true)
+      setProjectFiles([])
+      setSelectedFileId('')
+      getProjectFiles(selectedProjectId)
+        .then((data) => setProjectFiles(data || []))
+        .catch(() => setProjectFiles([]))
+        .finally(() => setLoadingFiles(false))
+    } else {
+      setProjectFiles([])
+      setSelectedFileId('')
+    }
+  }, [selectedProjectId])
+
+  // Load file content when a file is selected
+  useEffect(() => {
+    if (selectedFileId) {
+      const file = projectFiles.find((f) => f.id === selectedFileId)
+      if (file) {
+        setCode(file.content || '')
+        setLanguage(file.language || 'python')
+      }
+    }
+  }, [selectedFileId, projectFiles])
 
   const showToast = (msg) => {
     setToast(msg)
@@ -82,13 +120,17 @@ function AnalyzerPage() {
   }
 
   const handleAnalyze = async () => {
-    goToStep(5)
+    goToStep(4)
     setIsLoading(true)
     setResults(null)
     setError(null)
     try {
-      const currentModeName = analysisModes.find((m) => m.id === selectedMode)?.name || selectedMode
-      const apiResponse = await analyzeCode({ language, mode: currentModeName, code, instruction: customInstruction })
+      const params = { language, mode: 'standard', code, instruction: customInstruction }
+      if (useProjectFile && selectedProjectId && selectedFileId) {
+        params.projectId = selectedProjectId
+        params.fileId = selectedFileId
+      }
+      const apiResponse = await analyzeCode(params)
       setResults(transformResponse(apiResponse))
     } catch {
       setError('AI Analysis Failed. Please try again.')
@@ -100,11 +142,9 @@ function AnalyzerPage() {
 
   const handleDownloadReport = () => {
     if (!results) return
-    const mode = analysisModes.find((m) => m.id === selectedMode)?.name || selectedMode
     const lines = [
       `CodeRefine Analysis Report`,
       `==========================`,
-      `Mode: ${mode}`,
       `Language: ${languageLabels[language]}`,
       customInstruction ? `Custom Instruction: ${customInstruction}` : '',
       `Date: ${new Date().toLocaleDateString()}`,
@@ -127,17 +167,18 @@ function AnalyzerPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `coderefine-report-${language}-${mode.toLowerCase().replace(/\s+/g, '-')}.txt`
+    a.download = `coderefine-report-${language}.txt`
     a.click()
     URL.revokeObjectURL(url)
   }
 
   const handleRerun = () => {
     setResults(null)
+    setUseProjectFile(false)
+    setSelectedProjectId('')
+    setSelectedFileId('')
     goToStep(1)
   }
-
-  const currentMode = analysisModes.find((m) => m.id === selectedMode) || analysisModes[0]
 
   return (
     <AppLayout>
@@ -164,59 +205,92 @@ function AnalyzerPage() {
             exit="exit"
             transition={{ duration: 0.3, ease: 'easeInOut' }}
           >
-            {/* Step 1: Select Mode */}
+            {/* Step 1: Paste Code */}
             {step === 1 && (
               <div className="glass rounded-2xl p-6">
-                <h2 className="text-lg font-semibold text-white mb-4">Select Analysis Mode</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {analysisModes.map((mode) => (
-                    <motion.button
-                      key={mode.id}
-                      onClick={() => setSelectedMode(mode.id)}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className={`p-4 rounded-xl text-left border transition-all ${
-                        selectedMode === mode.id
-                          ? 'border-blue-500/60 bg-gradient-to-br from-blue-500/15 to-purple-600/15'
-                          : 'border-white/10 hover:border-white/25 hover:bg-white/5'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${mode.color} flex items-center justify-center text-lg`}>
-                          {mode.icon}
-                        </div>
-                        {selectedMode === mode.id && <CheckCircle size={14} className="text-blue-400 ml-auto" />}
-                      </div>
-                      <p className="text-sm font-semibold text-white">{mode.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{mode.description}</p>
-                    </motion.button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Step 2: Paste Code */}
-            {step === 2 && (
-              <div className="glass rounded-2xl p-6">
                 <h2 className="text-lg font-semibold text-white mb-4">Paste Your Code</h2>
-                <div className="flex items-center gap-3 mb-4">
-                  <label className="text-sm font-medium text-gray-400">Language:</label>
-                  <select
-                    value={language}
-                    onChange={(e) => handleLanguageChange(e.target.value)}
-                    className="bg-white/10 border border-white/20 text-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+
+                {/* Toggle: paste code vs select from project */}
+                <div className="flex items-center gap-2 mb-4">
+                  <button
+                    onClick={() => setUseProjectFile(false)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${!useProjectFile ? 'bg-blue-500/30 border border-blue-500/50 text-blue-300' : 'bg-white/5 border border-white/10 text-gray-400 hover:text-white'}`}
                   >
-                    {Object.entries(languageLabels).map(([value, label]) => (
-                      <option key={value} value={value} className="bg-gray-900">{label}</option>
-                    ))}
-                  </select>
+                    Paste Code
+                  </button>
+                  <button
+                    onClick={() => setUseProjectFile(true)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${useProjectFile ? 'bg-blue-500/30 border border-blue-500/50 text-blue-300' : 'bg-white/5 border border-white/10 text-gray-400 hover:text-white'}`}
+                  >
+                    <FolderOpen size={13} /> Select File from Project
+                  </button>
                 </div>
+
+                {useProjectFile ? (
+                  <div className="space-y-3 mb-4">
+                    <div>
+                      <label className="text-xs text-gray-400 mb-1.5 block">Select Project</label>
+                      {loadingProjects ? (
+                        <p className="text-sm text-gray-500">Loading projects…</p>
+                      ) : (
+                        <select
+                          value={selectedProjectId}
+                          onChange={(e) => setSelectedProjectId(e.target.value ? parseInt(e.target.value) : '')}
+                          className="w-full bg-white/10 border border-white/20 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="" className="bg-gray-900">— Choose a project —</option>
+                          {projects.map((p) => (
+                            <option key={p.id} value={p.id} className="bg-gray-900">{p.name}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    {selectedProjectId && (
+                      <div>
+                        <label className="text-xs text-gray-400 mb-1.5 block">Select File</label>
+                        {loadingFiles ? (
+                          <p className="text-sm text-gray-500">Loading files…</p>
+                        ) : projectFiles.length === 0 ? (
+                          <p className="text-sm text-gray-500">No files in this project</p>
+                        ) : (
+                          <select
+                            value={selectedFileId}
+                            onChange={(e) => setSelectedFileId(e.target.value ? parseInt(e.target.value) : '')}
+                            className="w-full bg-white/10 border border-white/20 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                          >
+                            <option value="" className="bg-gray-900">— Choose a file —</option>
+                            {projectFiles.map((f) => (
+                              <option key={f.id} value={f.id} className="bg-gray-900">{f.name} ({f.language})</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
+                    {selectedFileId && code && (
+                      <p className="text-xs text-green-400">✔ File loaded — you can preview or edit the code below</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 mb-4">
+                    <label className="text-sm font-medium text-gray-400">Language:</label>
+                    <select
+                      value={language}
+                      onChange={(e) => handleLanguageChange(e.target.value)}
+                      className="bg-white/10 border border-white/20 text-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                    >
+                      {Object.entries(languageLabels).map(([value, label]) => (
+                        <option key={value} value={value} className="bg-gray-900">{label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <CodeEditor language={language} value={code} onChange={(val) => setCode(val || '')} />
               </div>
             )}
 
-            {/* Step 3: Custom Instruction */}
-            {step === 3 && (
+            {/* Step 2: Custom Instruction */}
+            {step === 2 && (
               <div className="glass rounded-2xl p-6">
                 <h2 className="text-lg font-semibold text-white mb-2">Custom Instruction</h2>
                 <p className="text-gray-400 text-sm mb-4">Optionally guide the analysis with a specific focus area.</p>
@@ -227,22 +301,15 @@ function AnalyzerPage() {
                   rows={6}
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors text-sm resize-none"
                 />
-                <p className="text-xs text-gray-500 mt-2">Leave blank to use the default {currentMode.name} analysis.</p>
+                <p className="text-xs text-gray-500 mt-2">Leave blank to use the default analysis.</p>
               </div>
             )}
 
-            {/* Step 4: Review & Analyze */}
-            {step === 4 && (
+            {/* Step 3: Review & Confirm */}
+            {step === 3 && (
               <div className="glass rounded-2xl p-6">
-                <h2 className="text-lg font-semibold text-white mb-5">Review & Analyze</h2>
+                <h2 className="text-lg font-semibold text-white mb-5">Review & Confirm</h2>
                 <div className="space-y-3 mb-6">
-                  <div className="flex items-center gap-3 p-3.5 rounded-xl bg-white/5 border border-white/10">
-                    <span className="text-lg">{currentMode.icon}</span>
-                    <div>
-                      <p className="text-xs text-gray-500">Analysis Mode</p>
-                      <p className="text-sm font-medium text-white">{currentMode.name}</p>
-                    </div>
-                  </div>
                   <div className="flex items-center gap-3 p-3.5 rounded-xl bg-white/5 border border-white/10">
                     <span className="text-lg">💻</span>
                     <div>
@@ -279,8 +346,8 @@ function AnalyzerPage() {
               </div>
             )}
 
-            {/* Step 5: Results */}
-            {step === 5 && (
+            {/* Step 4: Results */}
+            {step === 4 && (
               <div>
                 {isLoading ? (
                   <div className="glass rounded-2xl p-6 min-h-[400px] flex items-center justify-center">
@@ -323,25 +390,6 @@ function AnalyzerPage() {
                       >
                         <RefreshCw size={14} /> Re-run
                       </motion.button>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-500">Re-run in:</span>
-                        <select
-                          onChange={(e) => {
-                            const mode = e.target.value
-                            if (mode) {
-                              setSelectedMode(mode)
-                              handleAnalyze()
-                            }
-                          }}
-                          defaultValue=""
-                          className="bg-white/10 border border-white/15 text-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
-                        >
-                          <option value="" className="bg-gray-900">Select mode...</option>
-                          {analysisModes.filter((m) => m.id !== selectedMode).map((m) => (
-                            <option key={m.id} value={m.id} className="bg-gray-900">{m.name}</option>
-                          ))}
-                        </select>
-                      </div>
                     </div>
                     <div className="glass rounded-2xl p-5 min-h-[500px] flex flex-col">
                       <ResultsPanel results={results} language={language} />
@@ -356,7 +404,7 @@ function AnalyzerPage() {
         </AnimatePresence>
 
         {/* Navigation */}
-        {!(step === 5 && !isLoading) && (
+        {!(step === 4 && !isLoading) && (
           <div className="flex justify-between mt-6">
             <motion.button
               onClick={() => goToStep(step - 1)}
@@ -371,7 +419,7 @@ function AnalyzerPage() {
             >
               <ChevronLeft size={16} /> Back
             </motion.button>
-            {step < 4 && (
+            {step < 3 && (
               <motion.button
                 onClick={() => goToStep(step + 1)}
                 whileHover={{ scale: 1.02 }}
@@ -381,7 +429,7 @@ function AnalyzerPage() {
                 Next <ChevronRight size={16} />
               </motion.button>
             )}
-            {step === 4 && (
+            {step === 3 && (
               <motion.button
                 onClick={handleAnalyze}
                 disabled={isLoading}

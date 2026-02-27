@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import TabButton from './TabButton'
 import IssueCard from './IssueCard'
-import ConfidenceChart from './ConfidenceChart'
+
 import OptimizedCodeView from './OptimizedCodeView'
 
 const tabs = [
@@ -11,7 +11,7 @@ const tabs = [
   { id: 'security', label: '🔒 Security' },
   { id: 'bestPractices', label: '✅ Best Practices' },
   { id: 'optimizedCode', label: '🔧 Optimized Code' },
-  { id: 'confidence', label: '📊 Confidence' },
+  
 ]
 
 function ResultsPanel({ results, language }) {
@@ -61,8 +61,7 @@ function ResultsPanel({ results, language }) {
       }
       case 'optimizedCode':
         return <OptimizedCodeView code={results.optimizedCode} language={language} />
-      case 'confidence':
-        return <ConfidenceChart score={results.confidence} />
+      
       default:
         return null
     }
