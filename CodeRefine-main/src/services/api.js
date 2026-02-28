@@ -156,6 +156,24 @@ export const exportZip = async (projectId, projectName = 'project') => {
 
 export const getProjectActivity = (projectId) => authFetch(`/projects/${projectId}/history`);
 
+// AI Extensions
+export const extensionsAPI = {
+  rewrite: (projectId, fileId, instruction) =>
+    authFetch('/extensions/rewrite', { method: 'POST', body: JSON.stringify({ project_id: projectId, file_id: fileId, instruction }) }),
+  explain: (projectId, fileId) =>
+    authFetch('/extensions/explain', { method: 'POST', body: JSON.stringify({ project_id: projectId, file_id: fileId }) }),
+  generateTests: (projectId, fileId, framework = '') =>
+    authFetch('/extensions/generate-tests', { method: 'POST', body: JSON.stringify({ project_id: projectId, file_id: fileId, test_framework: framework }) }),
+  debug: (projectId, fileId, errorMessage) =>
+    authFetch('/extensions/debug', { method: 'POST', body: JSON.stringify({ project_id: projectId, file_id: fileId, error_message: errorMessage }) }),
+  getMetrics: (projectId, fileId) =>
+    authFetch('/extensions/metrics', { method: 'POST', body: JSON.stringify({ project_id: projectId, file_id: fileId }) }),
+  visualize: (projectId, fileId) =>
+    authFetch('/extensions/visualize', { method: 'POST', body: JSON.stringify({ project_id: projectId, file_id: fileId }) }),
+  chat: (projectId, fileId, message, history = []) =>
+    authFetch('/extensions/chat', { method: 'POST', body: JSON.stringify({ project_id: projectId, file_id: fileId, message, conversation_history: history }) }),
+};
+
 export async function uploadFile(projectId, file) {
   const token = getAuthToken();
   const formData = new FormData();

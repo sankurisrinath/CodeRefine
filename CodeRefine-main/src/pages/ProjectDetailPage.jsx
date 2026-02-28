@@ -5,6 +5,7 @@ import { ArrowLeft, Upload, Plus, Save, Download, Trash2, FileCode, Clock } from
 import Editor from '@monaco-editor/react'
 import AppLayout from '../layouts/AppLayout'
 import * as api from '../services/api'
+import AIToolsPanel from '../components/AIToolsPanel'
 
 const LANGUAGE_OPTIONS = ['python', 'javascript', 'java', 'cpp', 'c', 'text']
 
@@ -442,6 +443,11 @@ function ProjectDetailPage() {
           </h2>
           <ActivityTimeline activities={activities} />
         </motion.div>
+
+        {/* AI Tools Panel (visible when a file is selected) */}
+        {selectedFile && (
+          <AIToolsPanel projectId={projectId} fileId={selectedFile.id} />
+        )}
       </motion.div>
     </AppLayout>
   )
