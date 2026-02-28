@@ -10,6 +10,7 @@ from routes.history import router as history_router
 from routes.projects import router as projects_router
 from routes.profile import router as profile_router
 from routes.files import router as files_router
+from routes.extensions import router as extensions_router
 from config.settings import ALLOWED_ORIGINS
 from database import init_db
 import models  # noqa: F401 — ensure all models are registered before init_db
@@ -50,6 +51,7 @@ app.include_router(history_router)
 app.include_router(projects_router)
 app.include_router(profile_router)
 app.include_router(files_router)
+app.include_router(extensions_router)
 
 
 @app.get("/health")
